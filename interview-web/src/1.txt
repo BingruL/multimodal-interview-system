@@ -1,0 +1,1299 @@
+<template>
+  <div style="text-align: center">
+    <a-space style="padding: 20px" direction="vertical">
+      <a-space>
+        <a-button
+          type="primary"
+          :disabled="isConnected || isConnecting"
+          @click="handleConnectClick"
+        >
+          连接
+        </a-button>
+        <a-button :disabled="!isConnected" @click="handleInterrupt">
+          打断
+        </a-button>
+        <a-button danger :disabled="!isConnected" @click="handleDisconnect">
+          断开
+        </a-button>
+        <a-button
+          v-if="audioEnabled"
+          :disabled="!isConnected"
+          @click="toggleMicrophone"
+        >
+          静音
+        </a-button>
+        <a-button v-else :disabled="!isConnected" @click="toggleMicrophone">
+          取消静音
+        </a-button>
+      </a-space>
+
+      <a-space v-if="isSupportVideo && videoDevices.length > 0">
+        <a-select
+          style="width: 250px"
+          :disabled="!isConnected"
+          v-model:value="selectedVideoDeviceId"
+          placeholder="选择视频输入设备"
+          @change="handleVideoDeviceChange"
+        >
+          <a-select-option
+            v-for="device in videoDevices"
+            :key="device.deviceId"
+            :value="device.deviceId"
+          >
+            {{ device.label || `设备 ${device.deviceId.substring(0, 8)}...` }}
+          </a-select-option>
+        </a-select>
+        <a-button
+          v-if="isVideoEnabled"
+          :disabled="!isConnected"
+          @click="toggleVideo"
+        >
+          关闭视频
+        </a-button>
+        <a-button v-else :disabled="!isConnected" @click="toggleVideo">
+          开启视频
+        </a-button>
+      </a-space>
+      <br />
+      <div>
+        <p>Connection Status: {{ connectStatus }}</p>
+      </div>
+      <a-space direction="vertical">
+        <a-space v-if="isSupportVideo">
+          <div
+            id="local-player"
+            style="width: 400px; height: 400px; border: 1px solid #ccc"
+          ></div>
+        </a-space>
+        <a-space>
+          <div
+            style="
+              margin-top: 20px;
+              padding: 20px;
+              max-height: 600px;
+              width: 400px;
+              overflow-y: auto;
+              border: 1px solid #ccc;
+            "
+          >
+            <h3>实时语音回复</h3>
+            <a-list :data-source="messageList">
+              <template #renderItem="{ item }">
+                <a-list-item style="text-align: left">
+                  {{ item }}
+                </a-list-item>
+              </template>
+            </a-list>
+          </div>
+        </a-space>
+      </a-space>
+    </a-space>
+  </div>
+  <!-- Home Page -->
+  <div v-if="currentPage === 'home'" class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-100 to-purple-100 p-4">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-2xl text-center">
+      <h1 class="text-5xl font-extrabold text-gray-800 mb-6 font-inter">AI 模拟面试官</h1>
+      <p class="text-lg text-gray-600 mb-8 font-inter">助您提升面试能力，成就职业梦想！</p>
+
+      <h2 class="text-3xl font-bold text-gray-700 mb-6 font-inter">选择面试领域与岗位</h2>
+      <div v-for="domain in mockInterviewDomains" :key="domain.id" class="mb-8 p-6 bg-blue-50 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
+        <h3 class="text-2xl font-semibold text-blue-700 mb-4 font-inter">{{ domain.name }}</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button
+            v-for="role in domain.roles"
+            :key="role"
+            @click="handleStartInterview(domain.id, role)"
+            class="bg-blue-600 text-white py-3 px-6 rounded-lg shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105 font-inter text-lg"
+          >
+            {{ role }}
+          </button>
+        </div>
+      </div>
+      <div class="mt-8 text-gray-500 text-sm font-inter">
+        当前用户ID: {{ userId || '加载中...' }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Interview Page -->
+  <div v-else-if="currentPage === 'interview'" class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-green-100 to-teal-100 p-4">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-3xl text-center">
+      <h1 class="text-4xl font-extrabold text-gray-800 mb-6 font-inter">模拟面试进行中</h1>
+      <p class="text-xl text-gray-600 mb-8 font-inter">
+        领域: <span class="font-semibold text-teal-600">{{ selectedDomainName }}</span> - 岗位: <span class="font-semibold text-teal-600">{{ selectedRole }}</span>
+      </p>
+
+      <div class="bg-gray-50 p-6 rounded-lg shadow-inner mb-8 text-left">
+        <p class="text-lg font-medium text-gray-700 mb-4 font-inter">
+          问题 {{ currentQuestionIndex + 1 }} / {{ totalQuestions }}:
+        </p>
+        <p class="text-2xl text-gray-900 leading-relaxed font-inter">
+          {{ currentQuestion }}
+        </p>
+        <p v-if="isAiThinking" class="text-blue-500 mt-2 flex items-center justify-center">
+          <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          AI思考中...
+        </p>
+      </div>
+
+      <div class="flex flex-col items-center mb-8">
+        <video ref="videoRef" autoplay muted class="w-full max-w-sm rounded-lg shadow-md mb-4 bg-gray-200"></video>
+        <div class="flex space-x-4 mb-4">
+          <button
+            @click="isRecordingVideo ? stopVideoRecording() : startVideoRecording()"
+            :class="['flex items-center justify-center px-6 py-3 rounded-full text-white font-semibold transition-all duration-300', isRecordingVideo ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600']"
+          >
+            <VideoIcon class="mr-2" />
+            {{ isRecordingVideo ? '停止录像' : '开始录像' }}
+          </button>
+          <button
+            @click="isRecordingAudio ? stopAudioRecording() : startAudioRecording()"
+            :class="['flex items-center justify-center px-6 py-3 rounded-full text-white font-semibold transition-all duration-300', isRecordingAudio ? 'bg-red-500 hover:bg-red-600' : 'bg-purple-500 hover:bg-purple-600']"
+          >
+            <MicIcon class="mr-2" />
+            {{ isRecordingAudio ? '停止录音' : '开始录音' }}
+          </button>
+        </div>
+      </div>
+
+      <textarea
+        v-model="userAnswer"
+        class="w-full p-4 border border-gray-300 rounded-lg mb-6 text-lg font-inter focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
+        rows="6"
+        placeholder="请在此输入您的回答..."
+      ></textarea>
+
+      <button
+        @click="handleNextQuestion"
+        :disabled="isLoading || isAiThinking"
+        class="flex items-center justify-center mx-auto bg-green-600 text-white py-4 px-8 rounded-full shadow-lg hover:bg-green-700 transition-all duration-300 transform hover:scale-105 font-inter text-xl disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <svg v-if="isLoading || isAiThinking" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <SendIcon v-else class="mr-2" />
+        {{ (currentQuestionIndex + 1 === totalQuestions && !aiGeneratedQuestion) ? '结束面试并生成报告' : '提交回答，下一题 ✨' }}
+      </button>
+
+      <button
+        @click="handleGoHome"
+        class="mt-4 flex items-center justify-center mx-auto bg-gray-400 text-white py-2 px-6 rounded-full shadow hover:bg-gray-500 transition-all duration-300 font-inter"
+      >
+        <HomeIcon class="mr-2" />
+        返回首页
+      </button>
+    </div>
+  </div>
+
+  <!-- Report Page -->
+  <div v-else-if="currentPage === 'report'">
+    <div v-if="!feedbackData" class="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-100 to-orange-100 p-4">
+      <p class="text-xl text-gray-700 font-inter">正在生成报告...</p>
+    </div>
+    <div v-else class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-orange-100 to-red-100 p-4">
+      <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl text-center">
+        <h1 class="text-4xl font-extrabold text-gray-800 mb-6 font-inter">面试评测报告</h1>
+        <p class="text-xl text-gray-600 mb-8 font-inter">
+          领域: <span class="font-semibold text-red-600">{{ selectedDomainName }}</span> - 岗位: <span class="font-semibold text-red-600">{{ selectedRole }}</span>
+        </p>
+
+        <div class="mb-8">
+          <h2 class="text-3xl font-bold text-gray-700 mb-4 font-inter flex items-center justify-center">
+            <ChartRadarIcon class="mr-2 text-red-500" />
+            能力雷达图
+          </h2>
+          <RadarChart :scores="radarChartScores" :labels="radarChartLabels" :max-score="100" />
+        </div>
+
+        <div class="mb-8 text-left">
+          <h2 class="text-3xl font-bold text-gray-700 mb-4 font-inter">关键问题定位</h2>
+          <ul class="list-disc list-inside text-lg text-gray-700 space-y-2">
+            <li v-for="(issue, index) in feedbackData.keyIssues" :key="index" class="font-inter">{{ issue }}</li>
+          </ul>
+        </div>
+
+        <div class="mb-8 text-left">
+          <h2 class="text-3xl font-bold text-gray-700 mb-4 font-inter">改进建议</h2>
+          <ul class="list-disc list-inside text-lg text-gray-700 space-y-2">
+            <li v-for="(suggestion, index) in feedbackData.improvementSuggestions" :key="index" class="font-inter">{{ suggestion }}</li>
+          </ul>
+        </div>
+
+        <button
+          @click="currentPage = 'recommendations'"
+          class="bg-blue-600 text-white py-4 px-8 rounded-full shadow-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105 font-inter text-xl mr-4"
+        >
+          <BookOpenIcon class="inline-block mr-2" />
+          查看学习推荐
+        </button>
+        <button
+          @click="handleGoHome"
+          class="bg-gray-400 text-white py-4 px-8 rounded-full shadow hover:bg-gray-500 transition-all duration-300 font-inter text-xl"
+        >
+          <HomeIcon class="inline-block mr-2" />
+          返回首页
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recommendations Page -->
+  <div v-else-if="currentPage === 'recommendations'" class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-purple-100 to-indigo-100 p-4">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl text-center">
+      <h1 class="text-4xl font-extrabold text-gray-800 mb-6 font-inter">个性化学习推荐</h1>
+      <p class="text-xl text-gray-600 mb-8 font-inter">
+        根据您的评测结果，为您推荐以下学习资源：
+      </p>
+
+      <div v-if="Object.keys(learningRecs).length > 0">
+        <div v-for="(items, category) in learningRecs" :key="category" class="mb-8 p-6 bg-indigo-50 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 text-left">
+          <h2 class="text-2xl font-semibold text-indigo-700 mb-4 font-inter">
+            {{ categoryLabels[category] }} 提升
+          </h2>
+          <ul class="list-disc list-inside text-lg text-gray-700 space-y-2">
+            <li v-for="(item, index) in items" :key="index" class="font-inter">
+              <a :href="item.link" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">
+                {{ item.title }}
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <p v-else class="text-lg text-gray-700 font-inter">暂无推荐资源。</p>
+
+      <button
+        @click="handleGoHome"
+        class="bg-gray-400 text-white py-4 px-8 rounded-full shadow hover:bg-gray-500 transition-all duration-300 font-inter text-xl"
+      >
+        <HomeIcon class="inline-block mr-2" />
+        返回首页
+      </button>
+    </div>
+  </div>
+</template>
+<script>
+import { ref, onUnmounted } from 'vue';
+import { message } from 'ant-design-vue';
+import {
+  EventNames,
+  RealtimeAPIError,
+  RealtimeClient,
+  RealtimeError,
+  RealtimeUtils,
+} from '@coze/realtime-api';
+import { CozeAPI, COZE_CN_BASE_URL, ChatEventType } from '@coze/api';
+import {
+  useTokenWithPat,
+  useTokenWithWeb,
+  useTokenWithJWT,
+  useTokenWithDevice,
+  useTokenWithPKCE,
+} from './hooks/index';
+import { NetworkErrorManager } from './network-error-manager';
+
+const botId = '7522465288949170212';
+const { getToken } = useTokenWithPat();
+
+export default {
+  data() {
+    return {
+      client: null,
+      messageList: [],
+      isConnecting: false,
+      isConnected: false,
+      audioEnabled: true,
+      isSupportVideo: false,
+      connectStatus: 'disconnected',
+      networkManager: null,
+      videoDevices: [],
+      selectedVideoDeviceId: '',
+      isVideoEnabled: true,
+      isMobileDevice: false,
+    };
+  },
+
+  methods: {
+    async getVoices() {
+      const api = new CozeAPI({
+        token: getToken,
+        baseURL: COZE_CN_BASE_URL,
+        allowPersonalAccessTokenInBrowser: true,
+      });
+      const voices = await api.audio.voices.list();
+      return voices.voice_list;
+    },
+
+    // 检测是否为移动设备
+    isMobile() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent,
+      );
+    },
+
+    async initClient() {
+      if (this.client) {
+        return;
+      }
+
+      // 检测是否为移动设备
+      this.isMobileDevice = this.isMobile();
+
+      const permission = await RealtimeUtils.checkDevicePermission(true);
+      if (!permission.audio) {
+        throw new Error('需要麦克风访问权限');
+      }
+      this.isSupportVideo = permission.video;
+
+      // 获取设备列表
+      if (this.isMobileDevice && this.isSupportVideo) {
+        // 移动设备上直接提供前置和后置摄像头选项
+        // 注意：移动端设备上也可以通过 RealtimeUtils.getAudioDevices 获取设备列表，
+        // 但是可能会返回比较多的设备，如苹果手机会有：前置相机、后置双镜头、后置相机、后置长焦相机这些设备
+        // 如果仅需要前置和后置摄像头选项，可以参考以下代码
+        this.videoDevices = [
+          { deviceId: 'user', label: '前置摄像头' },
+          { deviceId: 'environment', label: '后置摄像头' },
+        ];
+      } else {
+        // 非移动设备获取实际设备列表
+        const devices = await RealtimeUtils.getAudioDevices({
+          video: true,
+        });
+        this.videoDevices = devices.videoInputs || [];
+      }
+      if (!this.selectedVideoDeviceId && this.videoDevices.length > 0) {
+        this.selectedVideoDeviceId = this.videoDevices[0].deviceId;
+      }
+
+      const voices = await this.getVoices();
+
+      console.log('voices', this.selectedVideoDeviceId);
+
+      this.client = new RealtimeClient({
+        accessToken: getToken,
+        botId,
+        connectorId: '1024',
+        voiceId: voices.length > 0 ? voices[0].voice_id : undefined,
+        allowPersonalAccessTokenInBrowser: true,
+        debug: true,
+        videoConfig: permission.video
+          ? {
+              renderDom: 'local-player',
+              videoInputDeviceId: this.selectedVideoDeviceId || undefined,
+            }
+          : undefined,
+      });
+
+      this.handleMessageEvent();
+
+      // 这段代码可选，主要处理移动端场景下，网络异常监控处理
+      this.networkManager = new NetworkErrorManager(this.client);
+      this.networkManager.onStatusChange = status => {
+        this.connectStatus = status;
+        this.isConnecting =
+          status === 'connecting' || status === 'reconnecting';
+        this.isConnected = status === 'connected';
+      };
+      // 这段代码可选，主要处理移动端场景下，网络异常监控处理
+    },
+
+    handleMessageEvent() {
+      let lastEvent;
+      this.client?.on(EventNames.ALL_SERVER, (eventName, event) => {
+        if (
+          event.event_type !== ChatEventType.CONVERSATION_MESSAGE_DELTA &&
+          event.event_type !== ChatEventType.CONVERSATION_MESSAGE_COMPLETED
+        ) {
+          return;
+        }
+        const content = event.data.content;
+
+        if (
+          lastEvent?.event_type === ChatEventType.CONVERSATION_MESSAGE_DELTA
+        ) {
+          this.messageList[this.messageList.length - 1] += content;
+        } else if (
+          event.event_type === ChatEventType.CONVERSATION_MESSAGE_DELTA
+        ) {
+          this.messageList.push(content);
+        }
+        lastEvent = event;
+      });
+    },
+
+    handleConnectClick() {
+      this.isConnecting = true;
+      this.handleConnect();
+    },
+
+    async handleConnect() {
+      try {
+        if (!this.client) {
+          await this.initClient();
+        }
+
+        await this.client?.connect();
+        this.isConnected = true;
+      } catch (error) {
+        this.isConnecting = false;
+        console.error(error);
+        if (error instanceof RealtimeAPIError) {
+          switch (error.code) {
+            case RealtimeError.CREATE_ROOM_ERROR:
+              message.error(`创建房间失败: ${error.message}`);
+              break;
+            case RealtimeError.CONNECTION_ERROR:
+              message.error(`加入房间失败: ${error.message}`);
+              break;
+            case RealtimeError.DEVICE_ACCESS_ERROR:
+              message.error(`获取设备失败: ${error.message}`);
+              break;
+            default:
+              message.error(`连接错误: ${error.message}`);
+          }
+        } else {
+          message.error('连接错误：' + error);
+        }
+      }
+    },
+
+    handleInterrupt() {
+      try {
+        this.client?.interrupt();
+      } catch (error) {
+        message.error('打断失败：' + error);
+      }
+    },
+
+    handleDisconnect() {
+      try {
+        this.client?.disconnect();
+      } catch (error) {
+        message.error('断开失败：' + error);
+      }
+    },
+
+    toggleMicrophone() {
+      try {
+        this.client?.setAudioEnable(!this.audioEnabled);
+        this.audioEnabled = !this.audioEnabled;
+      } catch (error) {
+        message.error('切换麦克风状态失败：' + error);
+      }
+    },
+
+    toggleVideo() {
+      try {
+        this.client?.setVideoEnable(!this.isVideoEnabled);
+        this.isVideoEnabled = !this.isVideoEnabled;
+      } catch (error) {
+        message.error('切换视频状态失败：' + error);
+      }
+    },
+
+    async handleVideoDeviceChange(deviceId) {
+      try {
+        if (!this.client || !this.isConnected) {
+          return;
+        }
+
+        // 只要切换到屏幕分享设备，或者从屏幕分享设备切换到其他设备，都需要重新连接
+        if (
+          RealtimeUtils.isScreenShareDevice(deviceId) ||
+          RealtimeUtils.isScreenShareDevice(this.selectedVideoDeviceId)
+        ) {
+          // 保存当前选中的设备ID
+          this.selectedVideoDeviceId = deviceId;
+          // 如果是屏幕分享设备，需要重新连接
+          this.handleDisconnect();
+          this.client = null;
+          this.handleConnect();
+        } else {
+          // 保存当前选中的设备ID
+          this.selectedVideoDeviceId = deviceId;
+          await this.client.setVideoInputDevice(deviceId);
+        }
+        message.success('切换视频设备成功');
+      } catch (error) {
+        message.error('切换视频设备失败：' + error);
+      }
+    },
+  },
+
+  beforeUnmount() {
+    this.networkManager?.destroy();
+    this.handleDisconnect();
+  },
+};
+</script>
+<script setup>
+import { ref, onMounted, watch, computed, defineComponent } from 'vue';
+// FIX: Import Firebase modules for local development
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, addDoc, query, onSnapshot } from 'firebase/firestore';
+
+
+// --- Icon Components ---
+const MicIcon = defineComponent({ template: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-mic"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>` });
+const VideoIcon = defineComponent({ template: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-video"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>` });
+const SendIcon = defineComponent({ template: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>` });
+const HomeIcon = defineComponent({ template: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>` });
+const ChartRadarIcon = defineComponent({ template: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucede-chart-radar"><path d="M12 2L2 12L12 22L22 12L12 2Z"/><path d="M12 2V22"/><path d="M2 12H22"/><path d="M17.5 6.5L6.5 17.5"/><path d="M6.5 6.5L17.5 17.5"/></svg>` });
+const BookOpenIcon = defineComponent({ template: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>` });
+
+// --- Radar Chart Component ---
+const RadarChart = defineComponent({
+  props: ['scores', 'labels', 'maxScore'],
+  setup(props) {
+    const size = 300;
+    const center = size / 2;
+    const radius = size / 2 - 30;
+    const numPoints = computed(() => props.labels.length);
+    const angleStep = computed(() => (2 * Math.PI) / numPoints.value);
+
+    const getPoint = (score, index) => {
+      const angle = index * angleStep.value - Math.PI / 2;
+      const r = (score / props.maxScore) * radius;
+      const x = center + r * Math.cos(angle);
+      const y = center + r * Math.sin(angle);
+      return `${x},${y}`;
+    };
+
+    const polygonPoints = computed(() => props.scores.map((score, i) => getPoint(score, i)).join(' '));
+
+    const gridLines = computed(() => {
+      return [0.2, 0.4, 0.6, 0.8, 1.0].map(level => {
+        const currentRadius = radius * level;
+        return Array.from({ length: numPoints.value }).map((_, idx) => {
+          const angle = idx * angleStep.value - Math.PI / 2;
+          const x = center + currentRadius * Math.cos(angle);
+          const y = center + currentRadius * Math.sin(angle);
+          return `${x},${y}`;
+        }).join(' ');
+      });
+    });
+
+    const axes = computed(() => {
+      return props.labels.map((_, i) => {
+        const angle = i * angleStep.value - Math.PI / 2;
+        return {
+          x1: center,
+          y1: center,
+          x2: center + radius * Math.cos(angle),
+          y2: center + radius * Math.sin(angle),
+        };
+      });
+    });
+    
+    const textLabels = computed(() => {
+        return props.labels.map((label, i) => {
+            const angle = i * angleStep.value - Math.PI / 2;
+            return {
+                x: center + (radius + 20) * Math.cos(angle),
+                y: center + (radius + 20) * Math.sin(angle),
+                text: label,
+            };
+        });
+    });
+
+    return { size, polygonPoints, gridLines, axes, textLabels };
+  },
+  template: `
+    <svg :width="size" :height="size" class="mx-auto my-4">
+      <!-- Grid lines -->
+      <polygon v-for="(points, i) in gridLines" :key="'grid-' + i" :points="points" fill="none" stroke="#e0e0e0" stroke-width="1" />
+      <!-- Axes -->
+      <line v-for="(axis, i) in axes" :key="'axis-' + i" :x1="axis.x1" :y1="axis.y1" :x2="axis.x2" :y2="axis.y2" stroke="#ccc" stroke-width="1" />
+      <!-- Data polygon -->
+      <polygon :points="polygonPoints" fill="rgba(76, 175, 80, 0.6)" stroke="#4CAF50" stroke-width="2" />
+      <!-- Labels -->
+      <text v-for="(label, i) in textLabels" :key="'label-' + i" :x="label.x" :y="label.y" text-anchor="middle" dominant-baseline="middle" font-size="14" fill="#333" class="font-inter">
+        {{ label.text }}
+      </text>
+    </svg>
+  `
+});
+
+
+// --- Mock Data ---
+const mockInterviewDomains = [
+  { id: 'ai', name: '人工智能', roles: ['算法工程师', '机器学习工程师', '数据科学家'] },
+  { id: 'bigdata', name: '大数据', roles: ['大数据开发工程师', '数据分析师', '数据仓库工程师'] },
+  { id: 'iot', name: '物联网', roles: ['嵌入式开发工程师', '物联网架构师', '智能硬件工程师'] },
+];
+const mockInterviewQuestions = {
+  'ai-算法工程师': ["请介绍一下您对深度学习的理解以及它在实际应用中的一个例子。", "您在项目中遇到过哪些挑战？是如何解决的？", "请谈谈您对Transformer模型的理解。"],
+  'bigdata-数据分析师': ["请描述一下数据分析的完整流程。", "您熟悉哪些数据可视化工具？请举例说明其应用场景。", "在处理海量数据时，您会考虑哪些性能优化策略？"],
+  'iot-嵌入式开发工程师': ["请谈谈您对RTOS的理解以及它在嵌入式系统中的应用。", "您在嵌入式项目中遇到过哪些调试难题？是如何解决的？", "请描述一下您对传感器数据采集和处理的经验。"],
+};
+const mockFeedbackReport = {
+  ai: { professionalKnowledge: 85, jobSkillMatch: 80, languageExpression: 70, logicalThinking: 90, stressResistance: 75, keyIssues: ["语速偏快，语调偏低，未能传递出信心。", "在描述项目经历时，STAR结构不够清晰。"], improvementSuggestions: ["尝试放慢语速，注意语调的抑扬顿挫，增强表达的自信心。", "在回答项目经验类问题时，建议使用STAR法则（情境、任务、行动、结果）来组织答案，使内容更具条理性和说服力。", "注意与镜头保持眼神交流，展现积极的沟通意愿。"] },
+  bigdata: { professionalKnowledge: 78, jobSkillMatch: 85, languageExpression: 75, logicalThinking: 82, stressResistance: 80, keyIssues: ["对某些大数据工具的底层原理理解不够深入。"], improvementSuggestions: ["加强对Hadoop、Spark等大数据框架底层原理的学习。", "多参与实际项目，提升数据处理和分析的实战能力。"] },
+  iot: { professionalKnowledge: 90, jobSkillMatch: 88, languageExpression: 80, logicalThinking: 85, stressResistance: 70, keyIssues: ["在压力情境下，应变能力有待提高。"], improvementSuggestions: ["多进行模拟面试，尤其是压力面试，锻炼快速应变能力。", "学习更多关于物联网安全和设备通信协议的知识。"] },
+};
+const mockLearningRecommendations = {
+  languageExpression: [{ title: "《演讲技巧与沟通艺术》课程", link: "https://example.com/speech-course" }, { title: "《有效沟通的七个习惯》书籍", link: "https://example.com/communication-book" }],
+  jobSkillMatch: [{ title: "人工智能算法工程师必备题库", link: "https://example.com/ai-questions" }, { title: "大数据平台架构实战课程", link: "https://example.com/bigdata-course" }],
+  professionalKnowledge: [{ title: "深度学习入门与实践", link: "https://example.com/dl-intro" }, { title: "物联网操作系统原理", link: "https://example.com/rtos-principle" }],
+  logicalThinking: [{ title: "批判性思维训练营", link: "https://example.com/critical-thinking" }, { title: "系统设计面试指南", link: "https://example.com/system-design" }],
+  stressResistance: [{ title: "压力面试应对策略", link: "https://example.com/stress-interview" }, { title: "情商与逆商提升", link: "https://example.com/eq-resilience" }],
+};
+const categoryLabels = { professionalKnowledge: "专业知识掌握", jobSkillMatch: "岗位技能匹配度", languageExpression: "语言表达能力", logicalThinking: "逻辑思维能力", stressResistance: "抗压应变能力" };
+const radarChartLabels = ["专业知识", "岗位技能", "语言表达", "逻辑思维", "抗压应变"];
+
+// --- Utility ---
+const simulateApiCall = (data, delay = 1000) => new Promise(resolve => setTimeout(() => resolve(data), delay));
+
+// --- Reactive State ---
+const currentPage = ref('home');
+const selectedDomain = ref(null);
+const selectedRole = ref(null);
+const currentQuestionIndex = ref(0);
+const interviewHistory = ref([]);
+const userAnswer = ref('');
+const isRecordingAudio = ref(false);
+const isRecordingVideo = ref(false);
+const isLoading = ref(false);
+const feedbackData = ref(null);
+const learningRecs = ref([]);
+const userId = ref(null);
+const dbInstance = ref(null);
+const authInstance = ref(null);
+const isAuthReady = ref(false);
+const aiGeneratedQuestion = ref(null);
+const isAiThinking = ref(false);
+
+const videoRef = ref(null);
+const audioStreamRef = ref(null);
+const videoStreamRef = ref(null);
+const mediaRecorderRef = ref(null);
+const audioChunksRef = ref([]);
+
+// --- Computed Properties ---
+const selectedDomainName = computed(() => mockInterviewDomains.find(d => d.id === selectedDomain.value)?.name);
+const currentQuestionList = computed(() => {
+    if (!selectedDomain.value || !selectedRole.value) return [];
+    return mockInterviewQuestions[`${selectedDomain.value}-${selectedRole.value}`] || [];
+});
+const totalQuestions = computed(() => currentQuestionList.value.length);
+const currentQuestion = computed(() => aiGeneratedQuestion.value || currentQuestionList.value[currentQuestionIndex.value]);
+const radarChartScores = computed(() => {
+    if (!feedbackData.value) return [];
+    const { professionalKnowledge, jobSkillMatch, languageExpression, logicalThinking, stressResistance } = feedbackData.value;
+    return [professionalKnowledge, jobSkillMatch, languageExpression, logicalThinking, stressResistance];
+});
+
+// --- Methods ---
+const handleStartInterview = (domainId, role) => {
+  selectedDomain.value = domainId;
+  selectedRole.value = role;
+  currentQuestionIndex.value = 0;
+  interviewHistory.value = [];
+  aiGeneratedQuestion.value = null;
+  currentPage.value = 'interview';
+};
+
+const callGeminiForFollowUp = async (lastQuestion, userAnswer, domain, role) => {
+    isAiThinking.value = true;
+    const apiKey = ""; // Provided by Canvas at runtime
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    const prompt = `你是一个专业的AI面试官，正在对一位应聘者进行${domain}领域的${role}岗位的模拟面试。这是你提出的上一个问题：'${lastQuestion}' 这是应聘者的回答：'${userAnswer}' 请根据应聘者的回答，判断是否需要进行追问或引导。如果需要追问，请生成一个相关的、有深度的追问问题。如果认为当前话题已充分探讨，不需要追问，请回复一个特殊标记表示可以进入下一个话题。请以JSON格式返回你的判断和问题（如果生成了的话）。示例1（追问）：{ "action": "follow_up", "question": "基于您刚才的回答，您能具体谈谈在[某个点]上是如何实现的吗？" } 示例2（进入下一话题）：{ "action": "next_topic" }`;
+    
+    const payload = {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: { type: "OBJECT", properties: { "action": { "type": "STRING", "enum": ["follow_up", "next_topic"] }, "question": { "type": "STRING" } }, required: ["action"] }
+      }
+    };
+
+    try {
+      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      if (result.candidates?.[0]?.content?.parts?.[0]) {
+        const parsedJson = JSON.parse(result.candidates[0].content.parts[0].text);
+        isAiThinking.value = false;
+        return parsedJson;
+      }
+      throw new Error("Invalid API response structure");
+    } catch (error) {
+      console.error("Error calling Gemini API:", error);
+      isAiThinking.value = false;
+      return { action: "next_topic" }; // Fallback
+    }
+};
+
+const handleNextQuestion = async () => {
+  if (!userAnswer.value.trim()) {
+      const messageBox = document.createElement('div');
+      messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
+      messageBox.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-xl text-center rounded-lg"><p class="text-lg font-semibold text-gray-800 mb-4">请输入您的回答！</p><button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 rounded-lg">确定</button></div>`;
+      document.body.appendChild(messageBox);
+      document.getElementById('closeMessageBox').onclick = () => document.body.removeChild(messageBox);
+      return;
+  }
+
+  isLoading.value = true;
+  const question = currentQuestion.value;
+  const newEntry = { question, answer: userAnswer.value, timestamp: new Date().toISOString() };
+  
+  if (dbInstance.value && userId.value) {
+    try {
+      // FIX: Use modular 'collection' and 'addDoc' functions
+      const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+      await addDoc(collection(dbInstance.value, `artifacts/${appId}/users/${userId.value}/interviewHistory`), newEntry);
+    } catch (e) {
+      console.error("Error adding document: ", e);
+    }
+  }
+
+  interviewHistory.value.push(newEntry);
+  const lastAnswer = userAnswer.value;
+  userAnswer.value = '';
+
+  const geminiResponse = await callGeminiForFollowUp(question, lastAnswer, selectedDomainName.value, selectedRole.value);
+
+  if (geminiResponse.action === "follow_up" && geminiResponse.question) {
+    aiGeneratedQuestion.value = geminiResponse.question;
+  } else {
+    aiGeneratedQuestion.value = null;
+    if (currentQuestionIndex.value < totalQuestions.value - 1) {
+      currentQuestionIndex.value++;
+    } else {
+      await generateFeedbackReport();
+    }
+  }
+  isLoading.value = false;
+};
+
+const generateFeedbackReport = async () => {
+    isLoading.value = true;
+    const report = await simulateApiCall(mockFeedbackReport[selectedDomain.value]);
+    feedbackData.value = report;
+
+    const recommendations = {};
+    Object.keys(report).forEach(key => {
+        if (mockLearningRecommendations[key] && Array.isArray(mockLearningRecommendations[key])) {
+            recommendations[key] = mockLearningRecommendations[key];
+        }
+    });
+    learningRecs.value = recommendations;
+    isLoading.value = false;
+    currentPage.value = 'report';
+};
+
+const showPermissionError = (device) => {
+    const messageBox = document.createElement('div');
+    messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50';
+    messageBox.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-xl text-center rounded-lg"><p class="text-lg font-semibold text-gray-800 mb-4">无法访问${device}，请检查权限。</p><button id="closeMessageBox" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 rounded-lg">确定</button></div>`;
+    document.body.appendChild(messageBox);
+    document.getElementById('closeMessageBox').onclick = () => document.body.removeChild(messageBox);
+};
+
+const startAudioRecording = async () => {
+  try {
+    audioStreamRef.value = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorderRef.value = new MediaRecorder(audioStreamRef.value);
+    mediaRecorderRef.value.ondataavailable = (event) => audioChunksRef.value.push(event.data);
+    mediaRecorderRef.value.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.value, { type: 'audio/webm' });
+      audioChunksRef.value = [];
+      console.log("Audio recorded:", audioBlob);
+      const recognizedText = await simulateApiCall("模拟语音识别结果：用户回答得很好。", 500);
+      userAnswer.value = recognizedText;
+    };
+    mediaRecorderRef.value.start();
+    isRecordingAudio.value = true;
+  } catch (error) {
+    console.error("Error accessing microphone:", error);
+    showPermissionError('麦克风');
+  }
+};
+
+const stopAudioRecording = () => {
+  if (mediaRecorderRef.value?.state === 'recording') {
+    mediaRecorderRef.value.stop();
+    audioStreamRef.value?.getTracks().forEach(track => track.stop());
+    isRecordingAudio.value = false;
+  }
+};
+
+const startVideoRecording = async () => {
+  try {
+    videoStreamRef.value = await navigator.mediaDevices.getUserMedia({ video: true });
+    if (videoRef.value) {
+      videoRef.value.srcObject = videoStreamRef.value;
+    }
+    isRecordingVideo.value = true;
+    console.log("Video recording started.");
+  } catch (error) {
+    console.error("Error accessing camera:", error);
+    showPermissionError('摄像头');
+  }
+};
+
+const stopVideoRecording = () => {
+  if (videoStreamRef.value) {
+    videoStreamRef.value.getTracks().forEach(track => track.stop());
+    if (videoRef.value) {
+      videoRef.value.srcObject = null;
+    }
+    isRecordingVideo.value = false;
+    console.log("Video recording stopped.");
+  }
+};
+
+const handleGoHome = () => {
+  currentPage.value = 'home';
+  selectedDomain.value = null;
+  selectedRole.value = null;
+  currentQuestionIndex.value = 0;
+  interviewHistory.value = [];
+  userAnswer.value = '';
+  feedbackData.value = null;
+  learningRecs.value = [];
+  aiGeneratedQuestion.value = null;
+  isAiThinking.value = false;
+};
+
+// --- Lifecycle Hooks ---
+onMounted(async () => {
+  // FIX: Access global variables from 'window' object and provide fallbacks.
+  // For local dev, you might want to replace the empty object with your actual Firebase config.
+  const firebaseConfig = typeof window.__firebase_config !== 'undefined' 
+    ? JSON.parse(window.__firebase_config) 
+    : { apiKey: "your-api-key", authDomain: "your-auth-domain", ...{/* ADD YOUR LOCAL CONFIG HERE */} };
+
+  if (firebaseConfig.apiKey) {
+    try {
+      const app = initializeApp(firebaseConfig);
+      dbInstance.value = getFirestore(app);
+      authInstance.value = getAuth(app);
+      
+      const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
+
+      if (initialAuthToken) {
+        await signInWithCustomToken(authInstance.value, initialAuthToken);
+      } else {
+        await signInAnonymously(authInstance.value);
+      }
+      console.log("Firebase auth successful.");
+
+      onAuthStateChanged(authInstance.value, (user) => {
+        userId.value = user ? user.uid : crypto.randomUUID();
+        isAuthReady.value = true;
+        console.log("Auth state changed. User ID:", userId.value);
+      });
+    } catch (error) {
+      console.error("Firebase init error:", error);
+      userId.value = crypto.randomUUID();
+      isAuthReady.value = true;
+    }
+  } else {
+    console.warn("Firebase config not found. Firebase features will be disabled. Using random ID.");
+    userId.value = crypto.randomUUID();
+    isAuthReady.value = true;
+  }
+});
+
+watch([isAuthReady, dbInstance, userId], () => {
+  if (isAuthReady.value && dbInstance.value && userId.value) {
+    // FIX: Access global __app_id safely
+    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
+    // FIX: Use modular 'collection' and 'query'
+    const historyRef = collection(dbInstance.value, `artifacts/${appId}/users/${userId.value}/interviewHistory`);
+    const q = query(historyRef);
+    
+    // FIX: Use modular 'onSnapshot'
+    onSnapshot(q, (snapshot) => {
+      const history = [];
+      snapshot.forEach(doc => history.push(doc.data()));
+      interviewHistory.value = history;
+      console.log("Interview history loaded from Firestore:", history);
+    }, (error) => {
+      console.error("Error loading history:", error);
+    });
+  }
+}, { immediate: true });
+</script>
+
+<style>
+/* Using Tailwind, so minimal global styles are needed. */
+/* The 'font-inter' class is used throughout the template, assuming Inter is loaded globally, e.g., in index.html */
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+/* ========== 全局样式增强 ========== */
+body {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* 页面容器动画 */
+div[class*="flex flex-col items-center"] {
+  animation: fadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== 首页样式增强 ========== */
+.bg-gradient-to-br.from-blue-100.to-purple-100 {
+  background: linear-gradient(135deg, #e0f7fa 0%, #f3e5f5 100%);
+}
+
+/* 领域卡片悬浮效果 */
+.bg-blue-50 {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border-left: 4px solid #3b82f6;
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-blue-50:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.25);
+}
+
+.bg-blue-50:hover::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shine 1.5s infinite;
+}
+
+@keyframes shine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* 按钮发光效果 */
+.bg-blue-600 {
+    font-size: 24px;
+    color: rgb(0, 0, 0);
+    visibility: visible;
+    font-family: zt3, sans-serif;
+    box-sizing: border-box;
+    outline: none;
+    padding: 0px;
+    margin: 0px;
+    position: relative;
+    box-shadow: rgba(176, 208, 221, 0.16) 0px 6px 8px 1px;
+    float: left;
+    /* margin-right: 40px; */
+    width: calc(30% - 26.6667px);
+    text-align: center;
+    /* margin-bottom: 30px; */
+    overflow: hidden;
+    background: linear-gradient(rgba(116, 200, 223, 0.3) 0%, rgb(255, 255, 255) 100%);
+    border-radius: 30px;
+    border-width: 3px;
+    border-style: solid;
+    border-color: rgb(255, 255, 255);
+    border-image: initial;
+    height: 50px;
+}
+
+.bg-blue-600:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px -5px rgba(59, 130, 246, 0.6);
+}
+
+.bg-blue-600:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: 0.5s;
+}
+
+.bg-blue-600:hover:before {
+  left: 100%;
+}
+
+/* ========== 面试页面样式增强 ========== */
+.bg-gradient-to-br.from-green-100.to-teal-100 {
+  background: linear-gradient(135deg, #e6fffa 0%, #f0fff4 100%);
+}
+
+/* 问题卡片样式 */
+.bg-gray-50 {
+  background: linear-gradient(to bottom right, #f9fafb, #f0fdfa);
+  border-radius: 16px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+  border-left: 4px solid #10b981;
+  position: relative;
+  padding: 1.5rem;
+}
+
+/* 视频预览样式 */
+video {
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 2px solid #e5e7eb;
+  background: linear-gradient(45deg, #6ee7b7, #3b82f6);
+  background-size: 400% 400%;
+  animation: gradientBG 8s ease infinite;
+}
+
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 输入框聚焦效果 */
+textarea {
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid #d1d5db;
+}
+
+textarea:focus {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+  border-color: #10b981;
+  outline: none;
+}
+
+/* 按钮组样式 */
+.flex.space-x-4 {
+  gap: 1rem;
+}
+
+/* ========== 报告页面样式增强 ========== */
+.bg-gradient-to-br.from-orange-100.to-red-100 {
+  background: linear-gradient(135deg, #ffedd5 0%, #fee2e2 100%);
+}
+
+/* 雷达图容器 */
+.mb-8 {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 2rem;
+}
+
+/* 关键问题定位和改进建议卡片 */
+.text-left.bg-white {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  background: white;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.text-left.bg-white h2 {
+  background: linear-gradient(to right, #3b82f6, #8b5cf6);
+  color: white;
+  padding: 1rem 1.5rem;
+  margin: -1.5rem -1.5rem 1.5rem -1.5rem;
+  border-radius: 16px 16px 0 0;
+  font-weight: 600;
+}
+
+/* ========== 推荐页面样式增强 ========== */
+.bg-gradient-to-br.from-purple-100.to-indigo-100 {
+  background: linear-gradient(135deg, #f5f3ff 0%, #e0e7ff 100%);
+}
+
+/* 推荐卡片样式 */
+.bg-indigo-50 {
+  border-radius: 16px;
+  transition: all 0.3s ease;
+  border-left: 4px solid #8b5cf6;
+  box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.bg-indigo-50:hover {
+  transform: translateX(10px);
+  box-shadow: 0 20px 25px -5px rgba(139, 92, 246, 0.2);
+}
+
+/* ========== 按钮通用样式增强 ========== */
+button:not(:disabled) {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 1;
+  font-weight: 500;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* 主按钮特效 */
+.bg-green-600 {
+  background: linear-gradient(45deg, #10b981, #3b82f6);
+  background-size: 200% 200%;
+  transition: background-position 0.5s ease;
+  border: none;
+}
+
+.bg-green-600:hover {
+  background-position: 100% 100%;
+}
+
+/* ========== 加载动画增强 ========== */
+.animate-spin {
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ========== 雷达图修复 ========== */
+/* 修复雷达图不显示的问题 */
+svg {
+  display: block;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+polygon {
+  fill: rgba(76, 175, 80, 0.6);
+  stroke: #4CAF50;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+text {
+  font-size: 14px;
+  fill: #334155;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+circle {
+  fill: #3b82f6;
+}
+
+/* ========== 响应式调整 ========== */
+@media (max-width: 768px) {
+  .grid-cols-1.md\:grid-cols-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  .p-8 {
+    padding: 1.5rem;
+  }
+  
+  .text-5xl {
+    font-size: 2.5rem;
+  }
+  
+  .text-3xl {
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid-cols-1.md\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+  
+  .flex.space-x-4 {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  button {
+    width: 100%;
+  }
+  
+  .text-4xl {
+    font-size: 1.75rem;
+  }
+  
+  .text-2xl {
+    font-size: 1.5rem;
+  }
+  
+  video {
+    max-width: 100%;
+  }
+}
+
+/* ========== 卡片标题样式 ========== */
+h2.text-3xl.font-bold {
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+h2.text-3xl.font-bold::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 4px;
+  background: linear-gradient(to right, #3b82f6, #8b5cf6);
+  border-radius: 2px;
+}
+
+/* ========== 按钮图标样式 ========== */
+button svg {
+  transition: transform 0.3s ease;
+}
+
+button:hover svg {
+  transform: scale(1.1);
+}
+
+/* ========== 进度指示器 ========== */
+p.text-lg.font-medium {
+  position: relative;
+  display: inline-block;
+  padding-left: 2rem;
+}
+
+p.text-lg.font-medium::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.5rem;
+  height: 1.5rem;
+  background: #3b82f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+</style>

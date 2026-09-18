@@ -1,0 +1,47 @@
+{
+  "name": "multimodal-interview-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vue 3 web client for the multimodal interview system",
+  "scripts": {
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint",
+    "run-preinstall": "node scripts/preinstall.js",
+    "start": "vue-cli-service serve --port 3000",
+    "test": "exit 0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead",
+    "not ie 11"
+  ],
+  "dependencies": {
+    "@coze/api": "latest",
+    "@coze/realtime-api": "latest",
+    "@volcengine/rtc": "~4.62.11",
+    "ant-design-vue": "^4.2.6",
+    "core-js": "^3.39.0",
+    "firebase": "10.0.0",
+    "three": "^0.178.0",
+    "typescript": "^5.5.3",
+    "vue": "^3.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.16.0",
+    "@babel/eslint-parser": "~7.25.8",
+    "@babel/preset-env": "~7.20.2",
+    "@babel/preset-typescript": "^7.26.0",
+    "@types/node": "^20",
+    "@typescript-eslint/eslint-plugin": "^8.5.0",
+    "@typescript-eslint/parser": "^8.5.0",
+    "@vue/cli-plugin-babel": "~5.0.0",
+    "@vue/cli-plugin-eslint": "~5.0.0",
+    "@vue/cli-plugin-typescript": "~5.0.0",
+    "@vue/cli-service": "~5.0.0",
+    "@vue/eslint-config-typescript": "^12.0.0",
+    "eslint": "9.14.0",
+    "eslint-plugin-vue": "^8.0.3",
+    "ts-loader": "^9.5.1"
+  }
+}

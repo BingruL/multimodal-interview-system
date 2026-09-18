@@ -1,0 +1,63 @@
+{
+  "SceneConfig": {
+    "icon": "https://lf3-rtc-demo.volccdn.com/obj/rtc-aigc-assets/DoubaoAvatar.png",
+    "name": "自定义面试官"
+  },
+  "AccountConfig": {
+    "accessKeyId": "YOUR_VOLCENGINE_ACCESS_KEY_ID",
+    "secretKey": "YOUR_VOLCENGINE_SECRET_KEY"
+  },
+  "RTCConfig": {
+    "AppId": "YOUR_RTC_APP_ID",
+    "AppKey": "YOUR_RTC_APP_KEY",
+    "RoomId": "ChatRoom01",
+    "UserId": "Huoshan01",
+    "Token": "YOUR_RTC_TOKEN"
+  },
+  "VoiceChat": {
+    "AppId": "YOUR_RTC_APP_ID",
+    "RoomId": "ChatRoom01",
+    "TaskId": "Huoshan01",
+    "AgentConfig": {
+      "TargetUserId": ["user1"],
+      "UserId": "ChatBot01",
+      "EnableConversationStateCallback": true
+    },
+    "Config": {
+      "ASRConfig": {
+        "Provider": "volcano",
+        "ProviderParams": {
+          "Mode": "smallmodel",
+          "AppId": "YOUR_VOLCENGINE_APP_ID",
+          "Cluster": "volcengine_streaming_common"
+        }
+      },
+      "TTSConfig": {
+        "Provider": "volcano",
+        "ProviderParams": {
+          "app": {
+            "appid": "YOUR_VOLCENGINE_APP_ID",
+            "cluster": "volcano_tts"
+          },
+          "audio": {
+            "voice_type": "BV001_streaming",
+            "speed_ratio": 1,
+            "pitch_ratio": 1,
+            "volume_ratio": 1
+          }
+        }
+      },
+      "LLMConfig": {
+        "Mode": "ArkV3",
+        "EndPointId": "YOUR_ARK_ENDPOINT_ID",
+        "SystemMessages": [
+          "你是 AI 面试官，负责提出有针对性的问题并在面试结束后给出结构化反馈。"
+        ],
+        "VisionConfig": {
+          "Enable": false
+        }
+      },
+      "InterruptMode": 0
+    }
+  }
+}
