@@ -1,28 +1,30 @@
-# 多模态 AI 面试系统
+# Multimodal AI Interview System
 
-这是一个由 Vue 面试应用、FastAPI 分析服务和实时音视频（RTC）服务组成的多模态面试系统。候选人可以完成语音面试，查看实时字幕，并获得基于文本、语音和视频信号的结构化反馈。
+**English** | [简体中文](README.zh-CN.md)
 
-## 项目结构
+A multimodal interview system built with a Vue interview application, a FastAPI analysis service, and real-time communication (RTC) services. Candidates can practice voice interviews, follow live subtitles, and receive structured feedback based on text, audio, and video signals.
+
+## Project Structure
 
 ```text
-analysis-api/       FastAPI 分析服务，端口 8000
-interview-web/      Vue 3 面试应用，端口 3000
-rtc-demo/           React RTC 客户端 + Node/Koa 代理
-  Server/           RTC 代理服务，端口 3001
-  (client)          RTC React 客户端，建议端口 3002
-tools/              调试、验证和回归脚本
+analysis-api/       FastAPI analysis service, port 8000
+interview-web/      Vue 3 interview application, port 3000
+rtc-demo/           React RTC client and Node/Koa proxy
+  Server/           RTC proxy service, port 3001
+  (client)          React RTC client, recommended port 3002
+tools/              Debugging, verification, and regression scripts
 ```
 
-## 环境要求
+## Requirements
 
-- Node.js 18 或更高版本，npm 9 或更高版本
+- Node.js 18 or later and npm 9 or later
 - Python 3.9–3.11
-- 摄像头和麦克风（使用实时面试功能时）
-- 火山引擎 RTC、讯飞星火或 Coze 的账号配置（按需启用）
+- A camera and microphone for real-time interviews
+- Account credentials for Volcengine RTC, iFlytek Spark, or Coze, depending on the features you enable
 
-## 快速启动（Windows PowerShell）
+## Quick Start (Windows PowerShell)
 
-首次使用时分别安装三个 Node.js 服务和一个 Python 服务的依赖：
+Install the dependencies for the three Node.js services and the Python service:
 
 ```powershell
 cd analysis-api
@@ -42,41 +44,41 @@ cd ..
 npm install
 ```
 
-在 `analysis-api/.env` 中填写星火配置，在 `rtc-demo/Server/scenes/Custom.json` 中填写 RTC/火山引擎配置。`interview-web/.env.local` 中的 Coze PAT 和 Firebase 配置均为可选项；所有密钥只保存在本地环境文件中。
+Configure Spark credentials in `analysis-api/.env` and RTC/Volcengine settings in `rtc-demo/Server/scenes/Custom.json`. The Coze PAT and Firebase settings in `interview-web/.env.local` are optional. Keep credentials in local configuration files and out of Git.
 
-打开四个终端，按下面顺序启动：
+Open four terminals, each starting from the repository root, and launch the services in this order:
 
 ```powershell
-# 终端 1：分析 API
+# Terminal 1: Analysis API
 cd analysis-api
 .\.venv\Scripts\Activate.ps1
 python -m uvicorn main:app --reload --port 8000
 
-# 终端 2：RTC 代理
+# Terminal 2: RTC proxy
 cd rtc-demo\Server
 npm run dev
 
-# 终端 3：RTC React 客户端
+# Terminal 3: React RTC client
 cd rtc-demo
 $env:PORT=3002
 npm run start
 
-# 终端 4：Vue 面试应用
+# Terminal 4: Vue interview application
 cd interview-web
 npm run start
 ```
 
-启动后可访问：
+Once the services are running, open:
 
-- 面试应用：<http://localhost:3000>
-- RTC 代理：<http://localhost:3001>
-- RTC 客户端：<http://localhost:3002>
-- FastAPI 文档：<http://localhost:8000/docs>
-- API 健康检查：<http://localhost:8000/health>
+- Interview application: <http://localhost:3000>
+- RTC proxy: <http://localhost:3001>
+- RTC client: <http://localhost:3002>
+- FastAPI documentation: <http://localhost:8000/docs>
+- API health check: <http://localhost:8000/health>
 
-## API 能力
+## API Features
 
-分析服务提供领域与岗位查询、面试记录分析和多模态分析接口：
+The analysis service provides domain and role lookup, interview transcript analysis, and multimodal analysis:
 
 - `GET /domains`
 - `GET /roles/{domain}`
@@ -84,9 +86,9 @@ npm run start
 - `POST /analyze-interview`
 - `POST /analyze-multimodal`
 
-未配置星火凭据时，可以把 `useStaticData` 设为 `true` 使用内置演示数据；这样可以先验证前后端联调和报告页面。
+If Spark credentials are not configured, set `useStaticData` to `true` to use the built-in demo data. This lets you check frontend/backend integration and report rendering before connecting the live service.
 
-## 测试与构建
+## Testing and Building
 
 ```powershell
 cd analysis-api
@@ -101,10 +103,10 @@ cd ..\rtc-demo
 npm run build
 ```
 
-## 安全说明
+## Security
 
-仓库中的配置文件只保留占位符。不要提交 `.env`、`.env.local`、真实 RTC 场景文件、Coze PAT 或星火密钥。如果这些凭据曾经出现在旧版本或聊天记录中，请在对应平台撤销并重新生成。
+Configuration files in this repository contain placeholders only. Do not commit `.env`, `.env.local`, RTC scene files containing real credentials, Coze PATs, or Spark keys. If credentials have appeared in previous versions or shared conversations, revoke them and generate replacements on the relevant platform.
 
-## 许可证
+## License
 
-各子项目沿用其原始许可证；RTC 示例使用 BSD-3-Clause。发布前请同时检查第三方依赖和素材的许可证要求。
+Each subproject retains its original license; the RTC demo uses BSD-3-Clause. Review the licenses of third-party dependencies and assets before redistribution.
